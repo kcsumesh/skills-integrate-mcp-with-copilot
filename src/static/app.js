@@ -3,6 +3,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginButton = document.getElementById("login-button");
+  const loginContainer = document.getElementById("login-container");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const signupButton = document.getElementById("signup-button");
+  let authToken = sessionStorage.getItem("teacherToken");
+
+  function updateAuthState(username) {
+    const isLoggedIn = Boolean(authToken);
+    signupButton.disabled = !isLoggedIn;
+    signupButton.textContent = isLoggedIn ? "Sign Up" : "Sign Up (Teacher Login Required)";
+    loginButton.textContent = isLoggedIn ? `Log Out (${username || "Teacher"})` : "Teacher Login";
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.hidden = !isLoggedIn;
+    });
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}" hidden>Remove</button></li>`
                   )
                   .join("")}
               </ul>
@@ -60,6 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
+      updateAuthState();
     } catch (error) {
       activitiesList.innerHTML =
         "<p>Failed to load activities. Please try again later.</p>";
@@ -80,6 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: { Authorization: `Bearer ${authToken}` },
         }
       );
 
@@ -124,6 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: { Authorization: `Bearer ${authToken}` },
         }
       );
 
@@ -155,6 +174,45 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  loginButton.addEventListener("click", () => {
+    if (authToken) {
+      authToken = null;
+      sessionStorage.removeItem("teacherToken");
+      updateAuthState();
+      loginContainer.classList.add("hidden");
+      return;
+    }
+    loginContainer.classList.toggle("hidden");
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || "Login failed");
+      }
+      authToken = result.token;
+      sessionStorage.setItem("teacherToken", authToken);
+      updateAuthState(result.username);
+      loginForm.reset();
+      loginContainer.classList.add("hidden");
+    } catch (error) {
+      loginMessage.textContent = error.message;
+      loginMessage.className = "error";
+      loginMessage.classList.remove("hidden");
+    }
+  });
+
   // Initialize app
+  updateAuthState();
   fetchActivities();
 });
